@@ -1,0 +1,71 @@
+import numpy as np
+import pandas as pd
+import xarray as xr
+
+#Climate urls
+
+tmax_url = "http://thredds.northwestknowledge.net/thredds/dodsC/agg_terraclimate_tmax_1958_CurrentYear_GLOBE.nc" #maximum temperature
+tmin_url = "http://thredds.northwestknowledge.net/thredds/dodsC/agg_terraclimate_tmin_1958_CurrentYear_GLOBE.nc" #minimum temperature
+ppt_url = "http://thredds.northwestknowledge.net/thredds/dodsC/agg_terraclimate_ppt_1958_CurrentYear_GLOBE.nc" #precipitation
+aet_url = "http://thredds.northwestknowledge.net/thredds/dodsC/agg_terraclimate_aet_1958_CurrentYear_GLOBE.nc" #evapotranspiration
+
+#A function to extract climate data, calculate mean temperature, and combine the datasets into to a dataframe
+
+def climate_datasets(time_start, time_end, lon_start, lon_end, lat_start, lat_end):
+   
+    '''This function (i) extracts climate data based on time, latitude, and longitude
+    (ii) calculates mean temp from maximum and minimum temperature, (iii) combines all datasets into one dataframe'''
+
+    #open datasets from urls
+    ds_tmax = xr.open_dataset(tmax_url, drop_variables=['crs'])
+    ds_tmin = xr.open_dataset(tmin_url, drop_variables=['crs'])
+    ds_ppt = xr.open_dataset(ppt_url, drop_variables=['crs'])
+    ds_aet = xr.open_dataset(aet_url, drop_variables=['crs'])
+   
+    # Combine the datasets by their coordinates (lat,lon and time)
+    climate_ds = xr.combine_by_coords([ds_tmax, ds_tmin, ds_ppt, ds_aet], combine_attrs='override')
+
+    # Slice the data based on time, latitude, and longitude
+    climate_ds = climate_ds.sel(time=slice(time_start, time_end), lat=slice(lat_start, lat_end), lon=slice(lon_start, lon_end))
+    
+    #Calculate the mean for the entire selected region
+    climate_ds = climate_ds.mean(['lon', 'lat'])
+
+    #calculate the mean temp from the tmax and tmin 
+    temp_ds = xr.combine_by_coords([ds_tmax, ds_tmin])
+    temp_ds = temp_ds.sel(time=slice(time_start, time_end), lat=slice(lat_start, lat_end), lon=slice(lon_start, lon_end))
+    v1_tmax = temp_ds['tmax']
+    v2_tmin = temp_ds['tmin']
+    mean_temp = ((v1_tmax + v2_tmin)/2).mean(['lon', 'lat'])
+    
+    #rename mean temp ds to convert to dataframe
+    mean_temp = mean_temp.rename('mean temp')
+
+    #convert datasets to dataframes
+    climate_df = climate_ds.to_dataframe()
+
+    mean_temp_df = mean_temp.to_dataframe()
+
+    #join the dataframes
+    combined_df = climate_df.join(mean_temp_df)
+
+    return combined_df
+
+#enter the time frame, latitude, and longitude for each site to return data
+Site_1 = climate_datasets('2000-01', '2022-12', -45,-43, -2, -4)
+Site_2 = climate_datasets('2000-01', '2022-12', -52,-50, -4, -6)
+Site_3 = climate_datasets('2000-01', '2022-12', -65,-63, -1, -3)
+Control_site = climate_datasets('2000-01', '2022-12', -69, -67, -1, -3)
+
+#save data to csv
+Site_1.to_csv('Site_1_climate_ds.csv')
+Site_2.to_csv('Site_2_climate_ds.csv')
+Site_3.to_csv('Site_3_climate_ds.csv')
+Control_site.to_csv('Control_site_climate.csv')
+
+#print dataframes
+print (Site_1)
+print (Site_2)
+print (Site_3)
+print (Control_site)
+
